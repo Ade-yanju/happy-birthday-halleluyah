@@ -67,6 +67,21 @@ const CONFIG = {
     pageSize: 8,
     keep: 500,
   },
+  music: {
+    autoplay: true,
+    loopAll: true,
+    shuffle: false,
+    volume: 0.7,
+    tracks: [
+      "/assets/music/happy_birthday_1.mp3",
+      "/assets/music/happy_birthday_2.mp3",
+      "/assets/music/happy_birthday_3.mp3",
+      "/assets/music/happy_birthday_4.mp3",
+      "/assets/music/happy_birthday_5.mp3",
+      "/assets/music/happy_birthday_6.mp3",
+      "/assets/music/happy_birthday_7.mp3",
+    ],
+  },
 };
 
 const NAME_TAGLINE =
@@ -324,6 +339,58 @@ const styles = {
     pointerEvents: "none",
     zIndex: 2,
     overflow: "hidden",
+  },
+  musicBar: {
+    position: "fixed",
+    bottom: 16,
+    right: 16,
+    zIndex: 6,
+    background: "#12172b",
+    border: "1px solid #1f2540",
+    borderRadius: 14,
+    padding: "10px 12px",
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    boxShadow: "0 10px 26px rgba(0,0,0,.35)",
+  },
+  musicBtn: {
+    border: "1px solid #25305a",
+    background: "#0f1424",
+    color: "#e5e7eb",
+    borderRadius: 10,
+    padding: "8px 10px",
+    cursor: "pointer",
+    fontWeight: 700,
+  },
+  musicTitle: {
+    color: "#94a3b8",
+    fontSize: 12,
+    maxWidth: 180,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  musicSlider: {
+    appearance: "none",
+    width: 100,
+    height: 6,
+    borderRadius: 6,
+    background: "#25305a",
+    outline: "none",
+    cursor: "pointer",
+  },
+  toast: {
+    position: "fixed",
+    bottom: 80,
+    left: "50%",
+    transform: "translateX(-50%)",
+    background: "#0f1424",
+    color: "#e5e7eb",
+    border: "1px solid #1f2540",
+    borderRadius: 10,
+    padding: "10px 14px",
+    zIndex: 6,
   },
 };
 
@@ -771,6 +838,131 @@ function Wishes() {
   );
 }
 
+function MusicPlayer() {
+  const rawTracks = CONFIG.music.tracks.filter(Boolean);
+  const [order, setOrder] = useState(() => {
+    const idxs = rawTracks.map((_, i) => i);
+    if (CONFIG.music.shuffle) {
+      for (let i = idxs.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [idxs[i], idxs[j]] = [idxs[j], idxs[i]];
+      }
+    }
+    return idxs;
+  });
+  const [pos, setPos] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [needTap, setNeedTap] = useState(false);
+  const [volume, setVolume] = useState(CONFIG.music.volume ?? 0.7);
+  const audioRef = useRef(null);
+
+  const trackIndex = order[pos % order.length] || 0;
+  const currentSrc = rawTracks[trackIndex] || "";
+
+  useEffect(() => {
+    if (!audioRef.current || rawTracks.length === 0) return;
+    audioRef.current.src = currentSrc;
+    audioRef.current.volume = volume;
+    if (CONFIG.music.autoplay) {
+      const tryPlay = async () => {
+        try {
+          await audioRef.current.play();
+          setPlaying(true);
+          setNeedTap(false);
+        } catch {
+          setNeedTap(true);
+          setPlaying(false);
+        }
+      };
+      tryPlay();
+    }
+  }, [currentSrc]);
+
+  useEffect(() => {
+    if (!audioRef.current) return;
+    audioRef.current.volume = volume;
+  }, [volume]);
+
+  useEffect(() => {
+    if (!audioRef.current) return;
+    const onEnded = () => {
+      const nextPos = (pos + 1) % order.length;
+      if (nextPos === 0 && !CONFIG.music.loopAll) {
+        setPlaying(false);
+        return;
+      }
+      setPos(nextPos);
+    };
+    const a = audioRef.current;
+    a.addEventListener("ended", onEnded);
+    return () => a.removeEventListener("ended", onEnded);
+  }, [pos, order.length]);
+
+  const togglePlay = async () => {
+    if (!audioRef.current) return;
+    if (playing) {
+      audioRef.current.pause();
+      setPlaying(false);
+    } else {
+      try {
+        await audioRef.current.play();
+        setPlaying(true);
+        setNeedTap(false);
+      } catch {
+        setNeedTap(true);
+      }
+    }
+  };
+
+  const nextTrack = () => setPos((p) => (p + 1) % order.length);
+  const prevTrack = () => setPos((p) => (p - 1 + order.length) % order.length);
+
+  const toggleMute = () => {
+    if (!audioRef.current) return;
+    audioRef.current.muted = !audioRef.current.muted;
+    setMuted(audioRef.current.muted);
+  };
+
+  if (rawTracks.length === 0) return null;
+
+  return (
+    <>
+      <audio ref={audioRef} preload="auto" playsInline />
+      {needTap && (
+        <div style={styles.toast} onClick={togglePlay}>
+          Tap to play birthday music
+        </div>
+      )}
+      <div style={styles.musicBar}>
+        <button style={styles.musicBtn} onClick={prevTrack}>
+          Prev
+        </button>
+        <button style={styles.musicBtn} onClick={togglePlay}>
+          {playing ? "Pause" : "Play"}
+        </button>
+        <button style={styles.musicBtn} onClick={nextTrack}>
+          Next
+        </button>
+        <button style={styles.musicBtn} onClick={toggleMute}>
+          {muted ? "Unmute" : "Mute"}
+        </button>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value={volume}
+          onChange={(e) => setVolume(parseFloat(e.target.value))}
+          style={styles.musicSlider}
+          aria-label="Volume"
+        />
+        <span style={styles.musicTitle}>{currentSrc.split("/").pop()}</span>
+      </div>
+    </>
+  );
+}
+
 export default function App() {
   ensureKeyframes();
   const confettiRef = useRef(null);
@@ -786,6 +978,7 @@ export default function App() {
     <div style={styles.app}>
       <canvas id="confetti" ref={confettiRef} style={styles.confettiCanvas} />
       <Balloons />
+      <MusicPlayer />
       <main style={styles.page}>
         <Hero name={CONFIG.friendName} tagline={tagline} />
         <Reasons items={CONFIG.reasons} />
